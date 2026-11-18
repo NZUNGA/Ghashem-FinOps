@@ -1,0 +1,66 @@
+{% extends "dashboard/base.html" %}
+{% block title %}Resource history — {{ client.display_name }}{% endblock %}
+
+{% block topbar %}
+<div class="topbar">
+  <div class="topbar-left">
+    <h1>Resource history</h1>
+    <div class="topbar-meta">{{ rows|length }} resource{{ rows|length|pluralize }} deleted in the last {{ window_days }} days</div>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+
+{% if not rows %}
+<div class="empty">
+  <div class="empty-icon">⬡</div>
+  <h3>No deleted resources</h3>
+  <p>Resources confirmed deleted from Azure in the last {{ window_days }} days will appear here. Nothing has been deleted recently.</p>
+</div>
+{% else %}
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">Recently deleted</div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Resource</th>
+          <th>Type</th>
+          <th>Resource group</th>
+          <th>Deleted</th>
+          <th style="text-align:right">Savings resolved</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td>
+            <span class="mono" style="font-weight:500;font-size:13px;text-decoration:line-through;color:var(--ink-faint)">
+              {{ r.resource_name }}
+            </span>
+          </td>
+          <td>
+            {% if r.resource_type %}
+            <span class="badge" style="background:var(--bg-sunken);color:var(--ink-faint);font-size:10px">
+              {{ r.resource_type }}
+            </span>
+            {% else %}
+              <span style="color:var(--ink-faint)">—</span>
+            {% endif %}
+          </td>
+          <td style="color:var(--ink-faint);font-size:12px">{{ r.resource_group|default:"—" }}</td>
+          <td style="color:var(--ink-soft);font-size:12px">{{ r.deleted_at|date:"M d, Y" }}</td>
+          <td class="mono" style="text-align:right;color:var(--teal)">
+            {% if r.savings_resolved %}${{ r.savings_resolved|floatformat:0 }}/mo{% else %}—{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,134 @@
+{% extends "dashboard/base.html" %}
+{% block title %}Add new client{% endblock %}
+
+{% block topbar %}
+<div class="topbar">
+  <div class="topbar-left">
+    <h1>Add new client</h1>
+    <div class="topbar-meta">Onboard a new Azure tenant for analysis</div>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+
+{% if errors.form_error %}
+<div class="card" style="border-color:var(--red);margin-bottom:16px">
+  <div style="color:var(--red)">{{ errors.form_error }}</div>
+</div>
+{% endif %}
+
+<form method="post" class="card" novalidate>
+  {% csrf_token %}
+
+  <div class="card-header">
+    <div class="card-title">Client details</div>
+  </div>
+
+  <div style="display:flex;gap:16px;margin-bottom:14px">
+    <div class="filter-group" style="flex:1">
+      <label for="id_display_name">Display name</label>
+      <input type="text" id="id_display_name" name="display_name" value="{{ form_data.display_name }}">
+      {% if errors.display_name %}<div style="color:var(--red);font-size:12px;margin-top:2px">{{ errors.display_name }}</div>{% endif %}
+    </div>
+
+    <div class="filter-group" style="flex:1">
+      <label for="id_slug">Slug <span id="slug-lock" style="display:none">🔒</span></label>
+      <input type="text" id="id_slug" name="slug" value="{{ form_data.slug }}" autocomplete="off">
+      {% if errors.slug %}<div style="color:var(--red);font-size:12px;margin-top:2px">{{ errors.slug }}</div>{% endif %}
+    </div>
+  </div>
+
+  <div style="display:flex;gap:16px;margin-bottom:14px">
+    <div class="filter-group" style="flex:1">
+      <label for="id_contact_name">Contact name</label>
+      <input type="text" id="id_contact_name" name="contact_name" value="{{ form_data.contact_name }}">
+      {% if errors.contact_name %}<div style="color:var(--red);font-size:12px;margin-top:2px">{{ errors.contact_name }}</div>{% endif %}
+    </div>
+
+    <div class="filter-group" style="flex:1">
+      <label for="id_contact_email">Contact email</label>
+      <input type="email" id="id_contact_email" name="contact_email" value="{{ form_data.contact_email }}">
+      {% if errors.contact_email %}<div style="color:var(--red);font-size:12px;margin-top:2px">{{ errors.contact_email }}</div>{% endif %}
+    </div>
+  </div>
+
+  <div style="display:flex;gap:16px;margin-bottom:14px">
+    <div class="filter-group" style="flex:1">
+      <label for="id_report_currency">Report currency</label>
+      <select id="id_report_currency" name="report_currency">
+        <option value="CAD" {% if form_data.report_currency == "CAD" %}selected{% endif %}>CAD</option>
+        <option value="USD" {% if form_data.report_currency == "USD" %}selected{% endif %}>USD</option>
+      </select>
+      {% if errors.report_currency %}<div style="color:var(--red);font-size:12px;margin-top:2px">{{ errors.report_currency }}</div>{% endif %}
+    </div>
+    <div style="flex:1"></div>
+  </div>
+
+  <div class="card-header" style="margin-top:8px">
+    <div class="card-title">Azure tenant</div>
+  </div>
+
+  <div style="display:flex;gap:16px;margin-bottom:14px">
+    <div class="filter-group" style="flex:1">
+      <label for="id_tenant_id">Tenant ID</label>
+      <input type="text" id="id_tenant_id" name="tenant_id" value="{{ form_data.tenant_id }}"
+             placeholder="12345678-1234-1234-1234-123456789012">
+      {% if errors.tenant_id %}<div style="color:var(--red);font-size:12px;margin-top:2px">{{ errors.tenant_id }}</div>{% endif %}
+    </div>
+
+    <div class="filter-group" style="flex:1">
+      <label for="id_subscription_id">Subscription ID</label>
+      <input type="text" id="id_subscription_id" name="subscription_id" value="{{ form_data.subscription_id }}"
+             placeholder="12345678-1234-1234-1234-123456789012">
+      {% if errors.subscription_id %}<div style="color:var(--red);font-size:12px;margin-top:2px">{{ errors.subscription_id }}</div>{% endif %}
+    </div>
+  </div>
+
+  <div style="display:flex;gap:16px;margin-bottom:14px">
+    <div class="filter-group" style="flex:1">
+      <label for="id_subscription_display_name">Subscription name</label>
+      <input type="text" id="id_subscription_display_name" name="subscription_display_name"
+             value="{{ form_data.subscription_display_name }}">
+      {% if errors.subscription_display_name %}<div style="color:var(--red);font-size:12px;margin-top:2px">{{ errors.subscription_display_name }}</div>{% endif %}
+    </div>
+
+    <div class="filter-group" style="flex:1">
+      <label for="id_access_group_id">Access group ID (optional)</label>
+      <input type="text" id="id_access_group_id" name="access_group_id" value="{{ form_data.access_group_id }}"
+             placeholder="Azure AD security group Object ID">
+      {% if errors.access_group_id %}<div style="color:var(--red);font-size:12px;margin-top:2px">{{ errors.access_group_id }}</div>{% endif %}
+    </div>
+  </div>
+
+  <div style="display:flex;gap:8px;margin-top:8px">
+    <button type="submit" class="btn btn-primary">Create client</button>
+    <a href="{% url 'dashboard:client_list' %}" class="btn btn-ghost">Cancel</a>
+  </div>
+</form>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+  const nameInput = document.getElementById('id_display_name');
+  const slugInput = document.getElementById('id_slug');
+  const lockIcon  = document.getElementById('slug-lock');
+  let slugLocked = slugInput.value.length > 0;
+  if (slugLocked) lockIcon.style.display = 'inline';
+
+  nameInput.addEventListener('input', function() {
+    if (slugLocked) return;
+    slugInput.value = nameInput.value.toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '');
+  });
+
+  slugInput.addEventListener('input', function() {
+    slugLocked = true;
+    lockIcon.style.display = 'inline';
+  });
+})();
+</script>
+{% endblock %}

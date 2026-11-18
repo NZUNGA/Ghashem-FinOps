@@ -1,0 +1,264 @@
+{% extends "dashboard/base.html" %}
+{% block title %}All clients{% endblock %}
+
+{% block topbar %}
+<div class="topbar">
+  <div class="topbar-left">
+    <h1>All clients</h1>
+    <div class="topbar-meta">{{ clients_data|length }} client{{ clients_data|length|pluralize }}</div>
+  </div>
+  <div class="topbar-actions">
+    <a href="{% url 'dashboard:onboard_new' %}" class="btn btn-primary btn-sm">+ Add new client</a>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+
+<div class="card">
+  {% if not clients_data %}
+  <div class="empty">
+    <div class="empty-icon">⚙</div>
+    <h3>No clients yet</h3>
+    <p>Onboard your first client to start generating cost-optimization findings.</p>
+    <a href="{% url 'dashboard:onboard_new' %}" class="btn btn-primary">+ Add new client</a>
+  </div>
+  {% else %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Client</th>
+          <th>Status</th>
+          <th>Last run</th>
+          <th>Open findings</th>
+          <th>Monthly savings</th>
+          <th>Monthly fee</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in clients_data %}
+        <tr id="client-row-{{ row.client.slug }}">
+          <td>
+            <a href="{% url 'dashboard:summary' row.client.slug %}">{{ row.client.display_name }}</a>
+            {% if row.client.tier == "advisory" %}
+              <span style="font-size:10px;padding:2px 8px;border-radius:10px;font-weight:500;
+                           background:var(--teal-bg);color:var(--teal);margin-left:6px">
+                {{ row.client.get_tier_display|truncatewords:1 }}
+              </span>
+            {% elif row.client.tier == "managed" %}
+              <span style="font-size:10px;padding:2px 8px;border-radius:10px;font-weight:500;
+                           background:#1E3A5F;color:#fff;margin-left:6px">
+                {{ row.client.get_tier_display|truncatewords:1 }}
+              </span>
+            {% else %}
+              <span style="font-size:10px;padding:2px 8px;border-radius:10px;font-weight:500;
+                           background:var(--bg-sunken);color:var(--ink-faint);margin-left:6px">
+                {{ row.client.get_tier_display|truncatewords:1 }}
+              </span>
+            {% endif %}
+          </td>
+          <td>
+            {% if row.client.onboarding_status == "pending_consent" %}
+              <span class="badge badge-medium">Awaiting consent</span>
+            {% elif row.client.onboarding_status == "pending_rbac" %}
+              <span class="badge badge-medium">Awaiting RBAC</span>
+            {% elif row.client.onboarding_status == "pending_pipeline" %}
+              <span class="badge badge-medium">Ready to run</span>
+            {% elif row.client.onboarding_status == "active" %}
+              <span class="badge badge-low">Active</span>
+            {% elif row.client.onboarding_status == "suspended" %}
+              <span class="badge badge-resolved">Suspended</span>
+            {% endif %}
+          </td>
+          <td>{% if row.last_run %}{{ row.last_run.started_at|date:"M d, Y" }}{% else %}Never{% endif %}</td>
+          <td>{{ row.open_findings }}</td>
+          <td class="amount">${{ row.monthly_savings|floatformat:0 }}/mo</td>
+          <td class="amount">${{ row.monthly_fee|floatformat:0 }} CAD/mo</td>
+          <td>
+            {% if row.client.onboarding_status != "active" %}
+              <a href="{% url 'dashboard:onboard_next_steps' row.client.slug %}" class="card-action">Resume onboarding →</a>
+            {% else %}
+              <a href="{% url 'dashboard:summary' row.client.slug %}" class="card-action">View dashboard →</a>
+            {% endif %}
+            {% if request.user.is_staff %}
+            <form method="post"
+                  action="{% url 'dashboard:set_tier' row.client.slug %}"
+                  style="display:inline;margin-left:8px">
+              {% csrf_token %}
+              <select name="tier" style="font-size:12px;padding:2px 4px">
+                {% for value, label in tier_choices %}
+                <option value="{{ value }}"
+                  {% if value == row.client.tier %}selected{% endif %}>
+                  {{ value|capfirst }}
+                </option>
+                {% endfor %}
+              </select>
+              <input type="text" name="tier_override_monthly"
+                     placeholder="Override $"
+                     value="{{ row.client.tier_override_monthly|default:'' }}"
+                     style="width:80px;font-size:12px;padding:2px 4px">
+              <button type="submit" class="btn btn-ghost"
+                      style="font-size:11px;padding:2px 8px">
+                Save
+              </button>
+            </form>
+            <button
+              class="btn btn-ghost"
+              style="color:var(--red); border-color:var(--red);
+                     font-size:12px; padding:4px 10px; margin-left:8px"
+              onclick="confirmDelete(
+                '{{ row.client.slug }}',
+                '{{ row.client.display_name|escapejs }}'
+              )">
+              Delete
+            </button>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Delete confirmation modal -->
+<div id="delete-modal"
+     style="display:none;
+            position:fixed; inset:0;
+            background:rgba(0,0,0,0.5);
+            z-index:1000;
+            align-items:center;
+            justify-content:center">
+
+  <div style="background:var(--bg);
+              border-radius:12px;
+              padding:32px;
+              max-width:420px;
+              width:90%;
+              box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+
+    <h3 style="margin:0 0 8px;
+               color:var(--red);
+               font-size:18px">
+      Delete client
+    </h3>
+
+    <p style="margin:0 0 8px;
+              color:var(--ink);
+              font-size:15px">
+      Are you sure you want to delete
+      <strong id="modal-client-name"></strong>?
+    </p>
+
+    <p style="margin:0 0 24px;
+              color:var(--ink-faint);
+              font-size:13px">
+      This will permanently delete all database rows,
+      Key Vault secrets, and clients.yaml entry for
+      this client. This action cannot be undone.
+    </p>
+
+    <div style="display:flex; gap:12px;
+                justify-content:flex-end">
+
+      <button
+        class="btn btn-ghost"
+        onclick="closeDeleteModal()"
+        style="min-width:80px">
+        No
+      </button>
+
+      <button
+        id="confirm-delete-btn"
+        class="btn btn-primary"
+        style="background:var(--red);
+               border-color:var(--red);
+               min-width:80px"
+        onclick="executeDelete()">
+        Yes, delete
+      </button>
+
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let pendingDeleteSlug = null;
+
+function confirmDelete(slug, displayName) {
+  pendingDeleteSlug = slug;
+  document.getElementById("modal-client-name")
+    .textContent = displayName;
+  const modal = document.getElementById("delete-modal");
+  modal.style.display = "flex";
+}
+
+function closeDeleteModal() {
+  pendingDeleteSlug = null;
+  document.getElementById("delete-modal")
+    .style.display = "none";
+}
+
+function executeDelete() {
+  if (!pendingDeleteSlug) return;
+
+  const btn = document.getElementById(
+    "confirm-delete-btn"
+  );
+  btn.disabled = true;
+  btn.textContent = "Deleting...";
+
+  const slug = pendingDeleteSlug;
+
+  fetch(`/admin/clients/${slug}/delete/`, {
+    method: "POST",
+    headers: {
+      "X-CSRFToken": CSRF_TOKEN,
+      "Content-Type": "application/json"
+    }
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.success) {
+      // Remove the row from the table without reload
+      const row = document.getElementById(
+        `client-row-${slug}`
+      );
+      if (row) {
+        row.style.transition = "opacity 0.3s";
+        row.style.opacity = "0";
+        setTimeout(() => row.remove(), 300);
+      }
+      closeDeleteModal();
+    } else {
+      btn.disabled = false;
+      btn.textContent = "Yes, delete";
+      alert("Delete failed: " + data.message);
+    }
+  })
+  .catch(() => {
+    btn.disabled = false;
+    btn.textContent = "Yes, delete";
+    alert("Network error — please try again.");
+    closeDeleteModal();
+  });
+}
+
+// Close modal on backdrop click
+document.getElementById("delete-modal")
+  .addEventListener("click", function(e) {
+    if (e.target === this) closeDeleteModal();
+  });
+
+// Close modal on Escape key
+document.addEventListener("keydown", function(e) {
+  if (e.key === "Escape") closeDeleteModal();
+});
+</script>
+{% endblock %}

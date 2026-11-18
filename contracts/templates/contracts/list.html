@@ -1,0 +1,103 @@
+{% extends "dashboard/base.html" %}
+{% block title %}Contracts — {{ client.display_name }}{% endblock %}
+
+{% block topbar %}
+<div class="topbar">
+  <div class="topbar-left">
+    <h1>Contracts</h1>
+    <div class="topbar-meta">{{ client.display_name }}</div>
+  </div>
+  <div class="topbar-actions">
+    <a href="{% url 'contracts:create' client.slug %}" class="btn btn-primary btn-sm">+ Add contract</a>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+
+<div class="stats-row">
+  <div class="stat-card">
+    <div class="stat-label">Total contracts</div>
+    <div class="stat-value">{{ contracts|length }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Total annual spend</div>
+    <div class="stat-value">${{ total_annual_cost|floatformat:0 }}</div>
+    <div class="stat-sub">${{ total_monthly_cost|floatformat:0 }}/mo</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Renewing in 90 days</div>
+    <div class="stat-value">{{ expiring_soon|length }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Expired</div>
+    <div class="stat-value" style="color:var(--red)">{{ expired }}</div>
+  </div>
+</div>
+
+{% if urgent_count > 0 %}
+<div style="background:var(--amber-bg);color:var(--amber);border-left:3px solid var(--amber);
+            border-radius:var(--radius);padding:12px 16px;margin-bottom:16px;font-size:13px;font-weight:500">
+  ⚠ {{ urgent_count }} contract{{ urgent_count|pluralize }} renewing within 30 days.
+</div>
+{% endif %}
+
+<div class="card">
+  {% if not contracts %}
+  <div class="empty">
+    <div class="empty-icon">📄</div>
+    <h3>No contracts yet</h3>
+    <p>Add your first SaaS contract to start tracking renewals.</p>
+    <a href="{% url 'contracts:create' client.slug %}" class="btn btn-primary">+ Add contract</a>
+  </div>
+  {% else %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Vendor</th>
+          <th>Product</th>
+          <th>Annual cost</th>
+          <th>Renewal date</th>
+          <th>Owner</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in contracts %}
+        <tr>
+          <td>{{ c.vendor_name }}</td>
+          <td>{{ c.product_name }}</td>
+          <td class="amount">${{ c.annual_cost|floatformat:2 }} {{ c.currency }}</td>
+          <td>
+            {% if c.days_until_renewal <= 0 %}
+              <span style="color:var(--ink-faint)">{{ c.renewal_date }} (Expired)</span>
+            {% elif c.days_until_renewal <= 30 %}
+              <span style="color:var(--red);font-weight:600">{{ c.renewal_date }}</span>
+            {% elif c.days_until_renewal <= 90 %}
+              <span style="color:var(--amber)">{{ c.renewal_date }}</span>
+            {% else %}
+              <span>{{ c.renewal_date }}</span>
+            {% endif %}
+          </td>
+          <td>{{ c.owner_name }}</td>
+          <td>
+            {% if c.status == "active" %}<span class="badge badge-low">Active</span>
+            {% elif c.status == "cancelled" %}<span class="badge badge-resolved">Cancelled</span>
+            {% else %}<span class="badge badge-resolved">Expired</span>{% endif %}
+          </td>
+          <td>
+            <a href="{% url 'contracts:detail' client.slug c.pk %}" class="card-action">View</a>
+            &nbsp;·&nbsp;
+            <a href="{% url 'contracts:edit' client.slug c.pk %}" class="card-action">Edit</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}

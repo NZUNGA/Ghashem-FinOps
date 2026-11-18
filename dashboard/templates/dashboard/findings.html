@@ -1,0 +1,262 @@
+{% extends "dashboard/base.html" %}
+{% block title %}Findings — {{ client.display_name }}{% endblock %}
+
+{% block topbar %}
+<div class="topbar">
+  <div class="topbar-left">
+    <h1>Findings</h1>
+    <div class="topbar-meta">
+      {% if filter_status == "removed" %}
+        Resources removed in the last 90 days
+      {% elif filter_status == "open" %}
+        {{ findings|length }} open · <span style="color:var(--teal)">${{ total_savings|floatformat:0 }}/mo opportunity</span>
+      {% else %}
+        {{ findings|length }} finding{{ findings|length|pluralize }}
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+
+<!-- Status tabs -->
+<div style="display:flex;gap:2px;margin-bottom:16px;background:var(--bg-sunken);
+            border-radius:var(--radius-lg);padding:4px;width:fit-content">
+  <a href="?status=open"
+     style="padding:7px 16px;border-radius:var(--radius);font-size:13px;font-weight:500;
+            text-decoration:none;transition:all .12s;
+            {% if filter_status == 'open' %}background:var(--bg-raised);color:var(--ink);box-shadow:var(--shadow-sm){% else %}color:var(--ink-faint){% endif %}">
+    Open
+    {% if open_count %}<span style="margin-left:5px;background:var(--red-bg);color:var(--red);
+      font-size:10px;font-weight:600;padding:1px 5px;border-radius:8px">{{ open_count }}</span>{% endif %}
+  </a>
+  <a href="?status=resolved"
+     style="padding:7px 16px;border-radius:var(--radius);font-size:13px;font-weight:500;
+            text-decoration:none;transition:all .12s;
+            {% if filter_status == 'resolved' %}background:var(--bg-raised);color:var(--ink);box-shadow:var(--shadow-sm){% else %}color:var(--ink-faint){% endif %}">
+    Resolved
+    {% if resolved_count %}<span style="margin-left:5px;background:var(--bg-sunken);color:var(--ink-faint);
+      font-size:10px;font-weight:600;padding:1px 5px;border-radius:8px">{{ resolved_count }}</span>{% endif %}
+  </a>
+  <a href="?status=all"
+     style="padding:7px 16px;border-radius:var(--radius);font-size:13px;font-weight:500;
+            text-decoration:none;transition:all .12s;
+            {% if filter_status == 'all' %}background:var(--bg-raised);color:var(--ink);box-shadow:var(--shadow-sm){% else %}color:var(--ink-faint){% endif %}">
+    All active
+    {% if all_count %}<span style="margin-left:5px;background:var(--bg-sunken);color:var(--ink-faint);
+      font-size:10px;font-weight:600;padding:1px 5px;border-radius:8px">{{ all_count }}</span>{% endif %}
+  </a>
+  {% if has_recently_deleted or filter_status == "removed" %}
+  <a href="?status=removed"
+     style="padding:7px 16px;border-radius:var(--radius);font-size:13px;font-weight:500;
+            text-decoration:none;transition:all .12s;
+            {% if filter_status == 'removed' %}background:var(--bg-raised);color:var(--ink);box-shadow:var(--shadow-sm){% else %}color:var(--ink-faint){% endif %}">
+    Recently removed
+    {% if removed_count %}<span style="margin-left:5px;background:var(--bg-sunken);color:var(--ink-faint);
+      font-size:10px;font-weight:600;padding:1px 5px;border-radius:8px">{{ removed_count }}</span>{% endif %}
+  </a>
+  {% endif %}
+</div>
+
+{% if filter_status == "removed" %}
+
+<!-- Recently removed — history mode, not actionable -->
+<div style="background:var(--bg-sunken);border:1px solid var(--line);border-radius:var(--radius-lg);
+            padding:14px 18px;margin-bottom:16px;display:flex;align-items:flex-start;gap:10px">
+  <span style="color:var(--ink-faint);font-size:16px;flex-shrink:0;margin-top:1px">◎</span>
+  <div>
+    <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:2px">
+      Findings history for recently removed resources
+    </div>
+    <div style="font-size:12px;color:var(--ink-soft)">
+      These resources no longer exist in Azure. Findings are shown for reference only —
+      no action is needed. Resources are removed from this view 90 days after deletion.
+    </div>
+  </div>
+</div>
+
+{% if not findings %}
+<div class="empty">
+  <div class="empty-icon">◎</div>
+  <h3>No recently removed resources</h3>
+  <p>Resources deleted more than 90 days ago no longer appear here.</p>
+</div>
+{% else %}
+<div class="gap-col">
+{% for f in findings %}
+<div class="finding-card" style="opacity:.65;pointer-events:auto">
+  <div class="finding-row" onclick="toggleFinding(this)">
+    <div class="finding-severity-bar resolved"></div>
+    <div class="finding-main">
+      <div class="finding-type-label" style="display:flex;align-items:center;gap:6px">
+        <span style="background:var(--bg-sunken);color:var(--ink-faint);font-size:10px;
+              font-weight:600;padding:2px 7px;border-radius:10px;text-transform:uppercase;
+              letter-spacing:.4px">Removed</span>
+        {% for k, v in finding_labels.items %}{% if k == f.finding_type %}{{ v }}{% endif %}{% endfor %}
+      </div>
+      <div class="finding-resource struck">{{ f.resource_name }}</div>
+      <div class="finding-evidence-preview">{{ f.evidence|truncatechars:120 }}</div>
+    </div>
+    <div class="finding-right">
+      <div class="finding-amount muted">${{ f.estimated_monthly_savings_usd|floatformat:0 }}</div>
+      <div class="finding-per-mo">/mo was at risk</div>
+      <span class="badge badge-resolved">{{ f.status }}</span>
+      <div class="finding-chevron">›</div>
+    </div>
+  </div>
+  <div class="finding-body">
+    <div>
+      <div class="finding-detail-label">Evidence at time of detection</div>
+      <div class="finding-detail-box">{{ f.evidence }}</div>
+      <div class="finding-meta">
+        <span>Group: <code>{{ f.resource_group }}</code></span>
+        <span>Type: <code>{{ f.finding_type }}</code></span>
+        {% if f.resolved_at %}<span>Resolved: <code>{{ f.resolved_at|date:"M d, Y" }}</code></span>{% endif %}
+      </div>
+    </div>
+    <div>
+      <div class="finding-detail-label">Original recommendation</div>
+      <div class="finding-detail-box" style="background:var(--bg-sunken)">{{ f.action }}</div>
+    </div>
+  </div>
+</div>
+{% endfor %}
+</div>
+{% endif %}
+
+{% else %}
+
+<!-- Normal findings view (open / resolved / all) -->
+{% if filter_status == "open" %}
+<!-- Filters only on open tab — resolved/all are short enough to not need them -->
+<div class="filter-bar" style="margin-bottom:16px">
+  <form method="get" style="display:contents">
+    <input type="hidden" name="status" value="{{ filter_status }}">
+    <div class="filter-group">
+      <label>Severity</label>
+      <select name="severity" onchange="this.form.submit()">
+        <option value="">All</option>
+        <option value="high"   {% if filter_severity == "high"   %}selected{% endif %}>High</option>
+        <option value="medium" {% if filter_severity == "medium" %}selected{% endif %}>Medium</option>
+        <option value="low"    {% if filter_severity == "low"    %}selected{% endif %}>Low</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Type</label>
+      <select name="type" onchange="this.form.submit()">
+        <option value="">All types</option>
+        {% for t in available_types %}
+          <option value="{{ t }}" {% if filter_type == t %}selected{% endif %}>
+            {% for k, v in finding_labels.items %}{% if k == t %}{{ v }}{% endif %}{% endfor %}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Min. savings/mo ($)</label>
+      <input type="number" name="min_savings" value="{{ filter_min }}"
+             style="width:110px" onchange="this.form.submit()">
+    </div>
+    {% if filter_severity or filter_type or filter_min != "0" %}
+    <div class="filter-group" style="justify-content:flex-end">
+      <label>&nbsp;</label>
+      <a href="?status={{ filter_status }}" class="btn btn-ghost btn-sm">Clear</a>
+    </div>
+    {% endif %}
+  </form>
+</div>
+{% endif %}
+
+{% if not findings %}
+<div class="empty">
+  <div class="empty-icon">⚑</div>
+  {% if filter_status == "open" %}
+  <h3>No open findings</h3>
+  <p>All findings are resolved or no issues were detected in the last run.</p>
+  {% else %}
+  <h3>Nothing matches these filters</h3>
+  <p>Try a different status or broader filter criteria.</p>
+  {% endif %}
+</div>
+{% elif filter_status == "open" %}
+
+<!-- Open tab — resource-grouped card view, same as the Overview page -->
+<div style="display:grid;
+            grid-template-columns: 1fr 130px 120px 120px;
+            padding:8px 16px;
+            font-size:12px;
+            font-weight:600;
+            color:var(--ink-faint);
+            text-transform:uppercase;
+            letter-spacing:0.05em;
+            border-bottom:1px solid var(--line);
+            margin-bottom:4px">
+  <span>Resource</span>
+  <span style="text-align:right">Monthly spend</span>
+  <span style="text-align:right">Saving/mo</span>
+  <span style="text-align:right">Saving/yr</span>
+</div>
+
+{% include "dashboard/_resource_findings.html" %}
+
+{% else %}
+<!-- Resolved / all — existing per-finding card view (status-aware
+     muted/struck rendering the resource-grouped view doesn't represent) -->
+<div class="gap-col">
+{% for f in findings %}
+<div class="finding-card{% if f.status == 'resolved' %} resolved{% endif %}">
+  <div class="finding-row" onclick="toggleFinding(this)">
+    <div class="finding-severity-bar {% if f.status == 'resolved' %}resolved{% else %}{{ f.severity }}{% endif %}"></div>
+    <div class="finding-main">
+      <div class="finding-type-label">
+        {% if f.status == "resolved" %}Resolved · {% elif f.status == "stale" %}Needs re-check · {% endif %}
+        {% for k, v in finding_labels.items %}{% if k == f.finding_type %}{{ v }}{% endif %}{% endfor %}
+      </div>
+      <div class="finding-resource{% if f.status == 'resolved' %} struck{% endif %}">{{ f.resource_name }}</div>
+      <div class="finding-evidence-preview">{{ f.evidence|truncatechars:120 }}</div>
+    </div>
+    <div class="finding-right">
+      <div class="finding-amount{% if f.status == 'resolved' %} muted{% endif %}">
+        ${{ f.estimated_monthly_savings_usd|floatformat:0 }}
+      </div>
+      <div class="finding-per-mo">/mo</div>
+      {% if f.status == "resolved" %}
+        <span class="badge badge-resolved">resolved</span>
+      {% else %}
+        <span class="badge badge-{{ f.severity }}">{{ f.severity }}</span>
+      {% endif %}
+      <div class="finding-chevron">›</div>
+    </div>
+  </div>
+  <div class="finding-body">
+    <div>
+      <div class="finding-detail-label">Evidence</div>
+      <div class="finding-detail-box">{{ f.evidence }}</div>
+      <div class="finding-meta">
+        <span>Group: <code>{{ f.resource_group }}</code></span>
+        <span>Analyzer: <code>{{ f.analyzer }}</code></span>
+        {% if f.status == "resolved" %}
+          <span>Resolved: <code>{{ f.resolved_at|date:"M d, Y H:i" }}</code></span>
+        {% elif f.last_checked_at %}
+          <span>Checked: <code>{{ f.last_checked_at|date:"M d, Y H:i" }}</code></span>
+        {% endif %}
+      </div>
+    </div>
+    <div>
+      {% if f.status == "resolved" %}
+        <div class="finding-detail-label">Outcome</div>
+        <div class="finding-detail-box">Resource no longer exists in Azure. No further action needed.</div>
+      {% else %}
+        <div class="finding-detail-label">What to do</div>
+        <div class="finding-action-box">{{ f.action }}</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endfor %}
+</div>
+{% endif %}
+
+{% endif %}
+{% endblock %}

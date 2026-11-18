@@ -1,0 +1,111 @@
+{% extends "dashboard/base.html" %}
+{% block title %}{{ contract.vendor_name }} {{ contract.product_name }} — {{ client.display_name }}{% endblock %}
+
+{% block topbar %}
+<div class="topbar">
+  <div class="topbar-left">
+    <h1>{{ contract.vendor_name }} — {{ contract.product_name }}</h1>
+    <div class="topbar-meta">
+      <a href="{% url 'contracts:list' client.slug %}" class="card-action">← Back to contracts</a>
+    </div>
+  </div>
+  <div class="topbar-actions">
+    <a href="{% url 'contracts:edit' client.slug contract.pk %}" class="btn btn-ghost btn-sm">Edit</a>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+
+<div style="display:flex;gap:16px;align-items:flex-start">
+
+  <div class="card" style="flex:1">
+    <div class="card-header">
+      <div class="card-title">Contract details</div>
+      {% if contract.status == "active" %}<span class="badge badge-low">Active</span>
+      {% elif contract.status == "cancelled" %}<span class="badge badge-resolved">Cancelled</span>
+      {% else %}<span class="badge badge-resolved">Expired</span>{% endif %}
+    </div>
+
+    <div style="font-size:13px;line-height:2.2">
+      <div><strong>Vendor:</strong> {{ contract.vendor_name }}</div>
+      <div><strong>Product:</strong> {{ contract.product_name }}</div>
+      <div><strong>Annual cost:</strong> ${{ contract.annual_cost|floatformat:2 }} {{ contract.currency }}</div>
+      <div><strong>Monthly cost:</strong> ${{ contract.monthly_cost|floatformat:2 }} {{ contract.currency }}</div>
+      <div>
+        <strong>Renewal date:</strong>
+        {% if contract.days_until_renewal <= 0 %}
+          <span style="color:var(--ink-faint)">{{ contract.renewal_date }} (Expired)</span>
+        {% elif contract.days_until_renewal <= 30 %}
+          <span style="color:var(--red);font-weight:600">{{ contract.renewal_date }} ({{ contract.days_until_renewal }} days)</span>
+        {% elif contract.days_until_renewal <= 90 %}
+          <span style="color:var(--amber)">{{ contract.renewal_date }} ({{ contract.days_until_renewal }} days)</span>
+        {% else %}
+          {{ contract.renewal_date }} ({{ contract.days_until_renewal }} days)
+        {% endif %}
+      </div>
+      <div><strong>Auto-renews:</strong> {% if contract.auto_renews %}Yes{% else %}No{% endif %}</div>
+      <div><strong>Owner:</strong> {{ contract.owner_name }} ({{ contract.owner_email }})</div>
+      {% if contract.payment_method %}<div><strong>Payment method:</strong> {{ contract.payment_method }}</div>{% endif %}
+      {% if contract.notes %}<div><strong>Notes:</strong> {{ contract.notes }}</div>{% endif %}
+    </div>
+  </div>
+
+  <div style="flex:1;display:flex;flex-direction:column;gap:16px">
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">Mark as renewed</div>
+      </div>
+      <form method="post" action="{% url 'contracts:renew' client.slug contract.pk %}">
+        {% csrf_token %}
+        <div class="filter-group" style="margin-bottom:10px">
+          <label for="id_new_cost">New annual cost</label>
+          <input type="number" step="0.01" id="id_new_cost" name="new_cost" value="{{ contract.annual_cost }}">
+        </div>
+        <div class="filter-group" style="margin-bottom:10px">
+          <label for="id_renew_notes">Notes</label>
+          <textarea id="id_renew_notes" name="notes" rows="2"
+                    style="background:var(--bg-sunken);border:1px solid var(--line);color:var(--ink);
+                           border-radius:var(--radius);padding:8px 10px;font-size:13px;font-family:var(--sans)"></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm">Mark as renewed</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">Renewal history</div>
+      </div>
+      {% if not renewals %}
+      <div style="font-size:13px;color:var(--ink-faint)">No renewals recorded yet.</div>
+      {% else %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Renewed</th>
+              <th>New cost</th>
+              <th>By</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in renewals %}
+            <tr>
+              <td>{{ r.renewed_at }}</td>
+              <td class="amount">${{ r.new_cost|floatformat:2 }}</td>
+              <td>{{ r.created_by.username|default:"—" }}</td>
+              <td>{{ r.notes|default:"—" }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+    </div>
+
+  </div>
+</div>
+
+{% endblock %}

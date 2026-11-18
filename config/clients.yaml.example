@@ -1,0 +1,3 @@
+app_client_id: "00000000-0000-0000-0000-000000000000"
+vault_url: "https://your-keyvault-name.vault.azure.net/"
+clients: []

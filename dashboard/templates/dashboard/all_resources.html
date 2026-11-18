@@ -1,0 +1,122 @@
+{% extends "dashboard/base.html" %}
+{% block title %}Resources — {{ client.display_name }}{% endblock %}
+
+{% block topbar %}
+<div class="topbar">
+  <div class="topbar-left">
+    <h1>Resources</h1>
+    <div class="topbar-meta">{{ total_resources }} tracked · ${{ total_spend_all|floatformat:0 }} total spend</div>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="stats-row" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
+  <div class="stat-card">
+    <div class="stat-label">Total resources</div>
+    <div class="stat-value">{{ total_resources }}</div>
+    <div class="stat-sub">currently tracked</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">{{ window_label }} spend</div>
+    <div class="stat-value">${{ total_spend_all|floatformat:0 }}</div>
+    <div class="stat-sub">{{ client.report_currency }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Flagged</div>
+    <div class="stat-value" style="color:var(--amber)">{{ flagged_count }}</div>
+    <div class="stat-sub">have open findings</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Clean</div>
+    <div class="stat-value" style="color:var(--teal)">{{ clean_count }}</div>
+    <div class="stat-sub">no issues detected</div>
+  </div>
+</div>
+
+<div class="filter-bar" style="margin-bottom:16px">
+  <form method="get" style="display:contents">
+    <div class="filter-group">
+      <label>Resource type</label>
+      <select name="type" onchange="this.form.submit()">
+        <option value="">All types</option>
+        {% for ns in available_namespaces %}
+          <option value="{{ ns }}" {% if filter_namespace == ns %}selected{% endif %}>
+            {% for k, v in namespace_labels.items %}{% if k == ns %}{{ v }}{% endif %}{% endfor %}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Status</label>
+      <select name="show" onchange="this.form.submit()">
+        <option value=""        {% if filter_show == ""        %}selected{% endif %}>All</option>
+        <option value="flagged" {% if filter_show == "flagged" %}selected{% endif %}>Flagged only</option>
+        <option value="clean"   {% if filter_show == "clean"   %}selected{% endif %}>Clean only</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Sort by</label>
+      <select name="sort" onchange="this.form.submit()">
+        <option value="cost_desc"    {% if filter_sort == "cost_desc"    %}selected{% endif %}>Highest spend</option>
+        <option value="cost_asc"     {% if filter_sort == "cost_asc"     %}selected{% endif %}>Lowest spend</option>
+        <option value="savings_desc" {% if filter_sort == "savings_desc" %}selected{% endif %}>Highest savings</option>
+        <option value="name"         {% if filter_sort == "name"         %}selected{% endif %}>Name A–Z</option>
+      </select>
+    </div>
+  </form>
+</div>
+
+{% if not rows %}
+<div class="empty">
+  <div class="empty-icon">⬡</div>
+  <h3>No resources found</h3>
+  <p>Run the analysis pipeline to collect resource and cost data.</p>
+</div>
+{% else %}
+<div class="card">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Resource</th>
+          <th>Type</th>
+          <th>Resource group</th>
+          <th style="text-align:right">Monthly avg</th>
+          <th style="text-align:right">{{ window_label }} spend</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr style="cursor:pointer"
+            onclick="window.location='{% url 'dashboard:deep_dive' client.slug %}?resource={{ r.resource_name|urlencode }}'">
+          <td>
+            <span class="mono" style="font-weight:500;font-size:13px">{{ r.resource_name }}</span>
+          </td>
+          <td>
+            <span class="badge" style="background:var(--navy-bg);color:var(--navy);font-size:10px">
+              {{ r.namespace_label }}
+            </span>
+          </td>
+          <td style="color:var(--ink-faint);font-size:12px">{{ r.resource_group|default:"—" }}</td>
+          <td class="mono" style="text-align:right;color:var(--ink-soft)">${{ r.monthly_cost|floatformat:0 }}</td>
+          <td class="mono" style="text-align:right">${{ r.total_cost|floatformat:0 }}</td>
+          <td>
+            {% if r.has_findings %}
+              <span class="badge badge-medium">{{ r.finding_count }} finding{{ r.finding_count|pluralize }}</span>
+              <span style="color:var(--teal);font-size:12px;font-weight:500;margin-left:6px">
+                ${{ r.potential_savings|floatformat:0 }}/mo
+              </span>
+            {% else %}
+              <span class="badge badge-low">Clean</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

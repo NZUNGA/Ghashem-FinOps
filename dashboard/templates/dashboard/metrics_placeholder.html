@@ -1,0 +1,24 @@
+{% extends "dashboard/base.html" %}
+{% block title %}Deep-dive metrics — {{ client.display_name }}{% endblock %}
+
+{% block topbar %}
+<div class="topbar">
+  <div class="topbar-left">
+    <h1>Deep-dive metrics</h1>
+    <div class="topbar-meta">{{ client.display_name }}</div>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+
+<div class="card">
+  <div class="empty">
+    <div class="empty-icon">📊</div>
+    <h3>Coming soon</h3>
+    <p>Deep-dive metrics coming soon for Advisory and Managed clients.</p>
+    <a href="{% url 'dashboard:summary' client.slug %}" class="btn btn-ghost">← Back to dashboard</a>
+  </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Virtual environment
+.venv/
+
+# Django
+db.sqlite3
+staticfiles/
+media/
+
+# Secrets / local config
+.env
+.env.local
+.env.production
+.env.staging
+local_settings.py
+config/clients.yaml
+CLAUDE.md
+
+# Deployment artifacts
+*.zip
+startup_test.log
+
+# IDE
+.idea/
+.vscode/

@@ -1,0 +1,110 @@
+{% extends "dashboard/base.html" %}
+{% block title %}Renewal calendar — {{ client.display_name }}{% endblock %}
+
+{% block topbar %}
+<div class="topbar">
+  <div class="topbar-left">
+    <h1>Renewal calendar</h1>
+    <div class="topbar-meta">
+      {{ upcoming_count }} contract{{ upcoming_count|pluralize }} renewing in the next 90 days ·
+      ${{ total_at_risk|floatformat:0 }} at risk
+    </div>
+  </div>
+  <div class="topbar-actions">
+    <a href="{% url 'contracts:list' client.slug %}" class="btn btn-ghost btn-sm">All contracts</a>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+
+{% if not this_week and not this_month and not next_90 %}
+<div class="empty">
+  <div class="empty-icon">📅</div>
+  <h3>Nothing renewing soon</h3>
+  <p>No active contracts are due for renewal in the next 90 days.</p>
+</div>
+{% endif %}
+
+{% if this_week %}
+<div class="card" style="margin-bottom:16px">
+  <div class="card-header">
+    <div class="card-title">This week</div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Vendor</th><th>Product</th><th>Renewal date</th><th>Annual cost</th><th>Owner</th><th>Days</th></tr>
+      </thead>
+      <tbody>
+        {% for c in this_week %}
+        <tr>
+          <td><a href="{% url 'contracts:detail' client.slug c.pk %}">{{ c.vendor_name }}</a></td>
+          <td>{{ c.product_name }}</td>
+          <td>{{ c.renewal_date }}</td>
+          <td class="amount">${{ c.annual_cost|floatformat:2 }} {{ c.currency }}</td>
+          <td>{{ c.owner_name }}</td>
+          <td><span class="badge badge-high">{{ c.days_until_renewal }}d</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% if this_month %}
+<div class="card" style="margin-bottom:16px">
+  <div class="card-header">
+    <div class="card-title">This month</div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Vendor</th><th>Product</th><th>Renewal date</th><th>Annual cost</th><th>Owner</th><th>Days</th></tr>
+      </thead>
+      <tbody>
+        {% for c in this_month %}
+        <tr>
+          <td><a href="{% url 'contracts:detail' client.slug c.pk %}">{{ c.vendor_name }}</a></td>
+          <td>{{ c.product_name }}</td>
+          <td>{{ c.renewal_date }}</td>
+          <td class="amount">${{ c.annual_cost|floatformat:2 }} {{ c.currency }}</td>
+          <td>{{ c.owner_name }}</td>
+          <td><span class="badge badge-medium">{{ c.days_until_renewal }}d</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% if next_90 %}
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">Next 90 days</div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Vendor</th><th>Product</th><th>Renewal date</th><th>Annual cost</th><th>Owner</th><th>Days</th></tr>
+      </thead>
+      <tbody>
+        {% for c in next_90 %}
+        <tr>
+          <td><a href="{% url 'contracts:detail' client.slug c.pk %}">{{ c.vendor_name }}</a></td>
+          <td>{{ c.product_name }}</td>
+          <td>{{ c.renewal_date }}</td>
+          <td class="amount">${{ c.annual_cost|floatformat:2 }} {{ c.currency }}</td>
+          <td>{{ c.owner_name }}</td>
+          <td><span class="badge badge-low">{{ c.days_until_renewal }}d</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

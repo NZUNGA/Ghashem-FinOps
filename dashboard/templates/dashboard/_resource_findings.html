@@ -1,0 +1,146 @@
+{% for resource in resource_findings %}
+<div style="border:1px solid var(--line);
+            border-radius:8px;
+            margin-bottom:10px;
+            overflow:hidden">
+
+  <!-- Resource header row -->
+  <div style="display:grid;
+              grid-template-columns: 1fr 130px 120px 120px;
+              padding:14px 16px;
+              background:var(--bg-sunken);
+              border-bottom:1px solid var(--line);
+              align-items:center">
+
+    <!-- Resource name + group + severity -->
+    <div>
+      <span style="font-weight:600;
+                   color:var(--navy);
+                   font-size:15px">
+        {{ resource.resource_name }}
+      </span>
+      {% if resource.resource_group %}
+      <span style="color:var(--ink-faint);
+                   font-size:12px;
+                   margin-left:8px">
+        {{ resource.resource_group }}
+      </span>
+      {% endif %}
+      <span class="badge badge-{{ resource.highest_severity }}" style="margin-left:10px">
+        {{ resource.highest_severity|upper }}
+      </span>
+    </div>
+
+    <!-- Monthly spend -->
+    <div style="text-align:right">
+      {% if resource.monthly_cost_real > 0 %}
+      <span style="font-size:14px;
+                   color:var(--ink);
+                   font-weight:500">
+        ${{ resource.monthly_cost_real|floatformat:2 }}
+      </span>
+      {% else %}
+      <span style="font-size:13px;
+                   color:var(--ink-faint)">
+        —
+      </span>
+      {% endif %}
+    </div>
+
+    <!-- Saving per month -->
+    <div style="text-align:right">
+      {% if resource.total_savings_mo > 0 %}
+      <span style="font-size:14px;
+                   font-weight:700;
+                   color:var(--teal)">
+        ${{ resource.total_savings_mo|floatformat:2 }}
+      </span>
+      {% else %}
+      <span style="color:var(--ink-faint)">—</span>
+      {% endif %}
+    </div>
+
+    <!-- Saving per year -->
+    <div style="text-align:right">
+      {% if resource.total_savings_yr > 0 %}
+      <span style="font-size:14px;
+                   font-weight:600;
+                   color:var(--teal)">
+        ${{ resource.total_savings_yr|floatformat:0 }}
+      </span>
+      {% else %}
+      <span style="color:var(--ink-faint)">—</span>
+      {% endif %}
+    </div>
+
+  </div>
+
+  <!-- Findings as bullet points -->
+  <div style="padding:10px 16px">
+    <ul style="margin:0; padding-left:18px;
+               list-style:disc">
+      {% for f in resource.findings %}
+      <li data-finding-id="{{ f.id }}" style="padding:6px 0;
+                 {% if not forloop.last %}border-bottom:1px solid var(--line);{% endif %}">
+
+        <div style="display:flex;
+                    justify-content:space-between;
+                    align-items:flex-start;
+                    gap:12px">
+
+          <!-- Label + action -->
+          <div style="flex:1">
+            <span style="font-weight:600;
+                         font-size:13px;
+                         color:var(--navy)">
+              {{ f.label }}
+            </span>
+            <p style="margin:3px 0 0;
+                      font-size:12px;
+                      color:var(--ink-faint);
+                      line-height:1.4">
+              {{ f.action|truncatechars:140 }}
+            </p>
+          </div>
+
+          <!-- Per-finding savings inline -->
+          {% if f.monthly_savings > 0 %}
+          <div style="text-align:right;
+                      white-space:nowrap;
+                      flex-shrink:0">
+            <span style="font-size:12px;
+                         color:var(--teal);
+                         font-weight:500">
+              ${{ f.monthly_savings|floatformat:2 }}/mo
+            </span>
+            <br>
+            <span style="font-size:11px;
+                         color:var(--ink-faint)">
+              ${{ f.annual_savings|floatformat:0 }}/yr
+            </span>
+          </div>
+          {% endif %}
+
+        </div>
+
+        <button
+          class="btn btn-ghost"
+          style="font-size:11px; padding:2px 8px;
+                 color:var(--ink-faint);
+                 margin-top:4px"
+          onclick="resolveFinding('{{ client.slug }}', {{ f.id }}, this)">
+          ✓ Mark resolved
+        </button>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+
+</div>
+{% empty %}
+<p style="color:var(--ink-faint);
+          text-align:center;
+          padding:40px 0">
+  No open findings for this client.
+</p>
+{% endfor %}

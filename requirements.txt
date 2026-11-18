@@ -1,0 +1,25 @@
+django>=4.2,<5.0
+django-axes>=6.0
+pyyaml>=6.0
+pandas>=2.0
+gunicorn>=21.0
+whitenoise>=6.6
+psycopg2-binary>=2.9
+social-auth-app-django>=5.4.0
+social-auth-core>=4.5.4
+requests>=2.31.0
+urllib3>=1.26.20
+azure-identity>=1.15
+azure-keyvault-secrets>=4.7
+azure-keyvault-certificates>=4.8
+azure-mgmt-costmanagement>=4.0
+azure-mgmt-monitor>=6.0
+azure-mgmt-resourcegraph>=8.0
+azure-mgmt-cognitiveservices>=13.0
+azure-mgmt-advisor>=9.0.0
+azure-storage-blob>=12.19
+reportlab>=4.0
+django-anymail[sendgrid]>=10.0
+
+# Dev tools (install locally: pip install pip-audit)
+# pip-audit — run before deploy: pip-audit -r requirements.txt

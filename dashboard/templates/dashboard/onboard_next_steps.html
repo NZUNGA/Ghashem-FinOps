@@ -1,0 +1,344 @@
+{% extends "dashboard/base.html" %}
+{% block title %}Next steps — {{ client.display_name }}{% endblock %}
+
+{% block topbar %}
+<div class="topbar">
+  <div class="topbar-left">
+    <h1>{{ client.display_name }}</h1>
+    <div class="topbar-meta">Complete onboarding to start analyzing this tenant</div>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+
+<div class="card" style="border-top:3px solid var(--teal);margin-bottom:16px">
+  <div class="card-header">
+    <div class="card-title">Step 1 — Grant application access</div>
+  </div>
+  <p style="font-size:13px;color:var(--ink-soft);margin-bottom:12px">
+    Send this URL to {{ client.display_name }}'s Azure Global Administrator.
+    They open it in a browser, sign in, and click Accept. Takes 2 minutes, happens once.
+  </p>
+  <div style="display:flex;gap:8px">
+    <input type="text" id="consent-url" value="{{ consent_url }}" readonly
+           style="flex:1;background:var(--bg-sunken);border:1px solid var(--line);border-radius:var(--radius);
+                  padding:8px 10px;font-family:var(--mono);font-size:12px;color:var(--ink)">
+    <button type="button" class="btn btn-ghost btn-sm" id="copy-consent-btn">Copy</button>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:16px">
+  <div class="card-header">
+    <div class="card-title">Step 2 — Assign read-only permissions</div>
+  </div>
+  <p style="font-size:13px;color:var(--ink-soft);margin-bottom:12px">
+    Ask the client to open Azure Cloud Shell (portal.azure.com → Cloud Shell icon) and paste this
+    script. Takes ~60 seconds. Requires Owner or User Access Administrator on their subscription.
+  </p>
+
+  {% if not sp_object_id %}
+  <div style="background:var(--amber-bg);border:1px solid var(--amber);border-radius:var(--radius-lg);
+              padding:12px 14px;margin-bottom:12px;display:flex;align-items:flex-start;gap:8px">
+    <span style="color:var(--amber);font-size:14px;flex-shrink:0;margin-top:1px">⚠</span>
+    <div style="font-size:13px;color:var(--ink)">
+      Complete Step 1 (admin consent) first, then refresh this page to generate the correct script.
+    </div>
+  </div>
+  {% endif %}
+
+  <pre id="rbac-script" style="background:var(--bg-sunken);border:1px solid var(--line);border-radius:var(--radius);
+              padding:12px;font-family:var(--mono);font-size:12px;color:var(--ink);
+              white-space:pre-wrap;overflow-x:auto;margin-bottom:10px;
+              {% if not sp_object_id %}opacity:0.55{% endif %}">{{ rbac_script }}</pre>
+  <button type="button" class="btn btn-ghost btn-sm" id="copy-rbac-btn">Copy</button>
+
+  {% if sp_object_id %}
+  <p style="font-size:11px;color:var(--ink-faint);margin-top:8px">
+    Service principal ID resolved automatically for your tenant: {{ sp_object_id }}
+  </p>
+  {% endif %}
+</div>
+
+<style>
+  .step-badge {
+    font-size: 12px;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-weight: 500;
+  }
+  .step-badge.pending {
+    background: var(--bg-sunken);
+    color: var(--ink-faint);
+  }
+  .step-badge.active {
+    background: var(--amber-bg);
+    color: var(--amber);
+  }
+  .step-badge.done {
+    background: var(--teal-bg);
+    color: var(--teal);
+  }
+</style>
+
+<div class="card" style="border-top:3px solid var(--amber)">
+  <div class="card-header">
+    <div class="card-title">Step 3 — Run first analysis</div>
+  </div>
+
+  <div id="analysis-section">
+
+    <!-- Confirmation checkbox -->
+    <div id="confirm-row" style="display:flex;align-items:flex-start;gap:8px;margin-bottom:14px">
+      <input type="checkbox" id="confirm-rbac" style="margin-top:3px">
+      <label for="confirm-rbac" style="font-size:13px;color:var(--ink-soft)">
+        I confirm the client has completed Step 1 (admin consent) and Step 2 (RBAC assignment)
+      </label>
+    </div>
+
+    <!-- Start button — hidden once pipeline starts -->
+    <button type="button" id="run-btn" class="btn btn-primary" disabled>
+      Run first analysis →
+    </button>
+
+    <!-- Progress bar — hidden initially -->
+    <div id="progress-container" style="display:none; margin-top:24px">
+
+      <div style="display:flex; justify-content:space-between; margin-bottom:8px">
+        <span id="progress-label" style="font-size:14px; color:var(--ink-faint)">
+          Starting pipeline...
+        </span>
+        <span id="progress-pct" style="font-size:14px; font-weight:600; color:var(--navy)">
+          0%
+        </span>
+      </div>
+
+      <div style="width:100%; height:8px; background:var(--bg-sunken); border-radius:4px; overflow:hidden">
+        <div id="progress-fill"
+             style="height:100%; width:0%; background:var(--teal); border-radius:4px; transition: width 0.5s ease">
+        </div>
+      </div>
+
+      <div style="display:flex; margin-top:12px; gap:8px; flex-wrap:wrap">
+        <span id="step-cost" class="step-badge pending">Cost data</span>
+        <span id="step-zombie" class="step-badge pending">Zombie resources</span>
+        <span id="step-metrics" class="step-badge pending">Utilization</span>
+        <span id="step-anomaly" class="step-badge pending">Anomaly detection</span>
+        <span id="step-brief" class="step-badge pending">PDF brief</span>
+      </div>
+
+    </div>
+
+    <!-- Success state — hidden initially -->
+    <div id="success-container"
+         style="display:none; margin-top:24px; padding:20px; background:var(--teal-bg);
+                border-radius:8px; border-left:4px solid var(--teal)">
+      <p style="margin:0 0 8px; font-weight:600; color:var(--teal)">
+        ✓ First analysis complete
+      </p>
+      <p style="margin:0 0 16px; color:var(--ink-faint); font-size:14px">
+        Your Azure environment has been analysed. Results are ready.
+      </p>
+      <a id="dashboard-link" href="{% url 'dashboard:summary' client.slug %}" class="btn btn-primary">
+        View dashboard →
+      </a>
+    </div>
+
+    <!-- Error state — hidden initially -->
+    <div id="error-container"
+         style="display:none; margin-top:24px; padding:16px; background:var(--red-bg);
+                border-radius:8px; border-left:4px solid var(--red)">
+      <p style="margin:0; color:var(--red); font-size:14px">
+        ⚠ Analysis failed.
+        <button type="button" onclick="resetAnalysis()" class="btn btn-ghost" style="margin-left:8px; font-size:13px">
+          Try again
+        </button>
+      </p>
+    </div>
+
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function copyToClipboard(text, btn) {
+  navigator.clipboard.writeText(text).then(function() {
+    const original = btn.textContent;
+    btn.textContent = 'Copied ✓';
+    setTimeout(function() { btn.textContent = original; }, 2000);
+  });
+}
+
+document.getElementById('copy-consent-btn').addEventListener('click', function() {
+  copyToClipboard(document.getElementById('consent-url').value, this);
+});
+document.getElementById('copy-rbac-btn').addEventListener('click', function() {
+  copyToClipboard(document.getElementById('rbac-script').textContent, this);
+});
+
+const CLIENT_SLUG = "{{ client.slug }}";
+const STATUS_URL = "/pipeline/status/";
+
+let runId = null;
+let pollInterval = null;
+let progressInterval = null;
+let simulatedPct = 0;
+
+// Enable button when checkbox checked
+document.getElementById("confirm-rbac").addEventListener("change", function() {
+  document.getElementById("run-btn").disabled = !this.checked;
+});
+
+// Start pipeline on button click
+document.getElementById("run-btn").addEventListener("click", function() {
+  startAnalysis();
+});
+
+function startAnalysis() {
+  // Hide button + checkbox, show progress
+  document.getElementById("run-btn").style.display = "none";
+  document.getElementById("confirm-rbac").parentElement.style.display = "none";
+  document.getElementById("progress-container").style.display = "block";
+
+  // Trigger pipeline via POST — CSRF_TOKEN is defined globally in base.html
+  fetch(`/pipeline/trigger/${CLIENT_SLUG}/`, {
+    method: "POST",
+    headers: {
+      "X-CSRFToken": CSRF_TOKEN,
+      "Content-Type": "application/json"
+    }
+  })
+  .then(r => r.json())
+  .then(data => {
+    // trigger_pipeline (pipeline/views.py) returns
+    // {"status":"already_running"} with no run_id (HTTP 409) when a run
+    // is already in progress for this client — fetch() only rejects on
+    // network failure, not on HTTP error status, so this must be
+    // checked explicitly or polling would proceed against
+    // /pipeline/status/undefined/ forever.
+    if (data.status !== "started" || !data.run_id) {
+      showError();
+      return;
+    }
+    runId = data.run_id;
+    startSimulatedProgress();
+    startPolling();
+  })
+  .catch(() => showError());
+}
+
+// Simulated progress — advances to 85% over 90 seconds
+// Real completion snaps to 100%
+function startSimulatedProgress() {
+  simulatedPct = 0;
+
+  // Step badges activate at these percentages
+  const steps = [
+    { id: "step-cost",    at: 10 },
+    { id: "step-zombie",  at: 30 },
+    { id: "step-metrics", at: 50 },
+    { id: "step-anomaly", at: 70 },
+    { id: "step-brief",   at: 85 },
+  ];
+
+  progressInterval = setInterval(() => {
+    if (simulatedPct < 85) {
+      // Advance roughly 1% per second, slowing near 85
+      const increment = simulatedPct < 60 ? 1.2 : 0.5;
+      simulatedPct = Math.min(85, simulatedPct + increment);
+      setProgress(Math.round(simulatedPct));
+
+      // Activate step badges
+      steps.forEach(step => {
+        if (simulatedPct >= step.at) {
+          activateStep(step.id);
+        }
+      });
+    }
+  }, 1000);
+}
+
+// Poll real status every 5 seconds
+function startPolling() {
+  pollInterval = setInterval(() => {
+    if (!runId) return;
+    fetch(`${STATUS_URL}${runId}/`)
+    .then(r => r.json())
+    .then(data => {
+      if (data.status === "completed" || data.status === "completed_with_errors") {
+        clearIntervals();
+        completeAllSteps();
+        setProgress(100);
+        setTimeout(showSuccess, 600);
+      } else if (data.status === "failed") {
+        clearIntervals();
+        showError();
+      }
+      // "pending" or "running" — let simulated progress continue
+    })
+    .catch(() => {
+      // Network error — keep polling silently
+    });
+  }, 5000);
+}
+
+function setProgress(pct) {
+  document.getElementById("progress-fill").style.width = pct + "%";
+  document.getElementById("progress-pct").textContent = pct + "%";
+
+  // Update label text based on progress
+  const label = document.getElementById("progress-label");
+  if (pct < 20) label.textContent = "Collecting cost data...";
+  else if (pct < 40) label.textContent = "Scanning for zombie resources...";
+  else if (pct < 60) label.textContent = "Analyzing utilization metrics...";
+  else if (pct < 80) label.textContent = "Running anomaly detection...";
+  else if (pct < 100) label.textContent = "Generating executive brief...";
+  else label.textContent = "Complete";
+}
+
+function activateStep(id) {
+  const el = document.getElementById(id);
+  if (el && el.classList.contains("pending")) {
+    el.classList.remove("pending");
+    el.classList.add("active");
+  }
+}
+
+function completeAllSteps() {
+  ["step-cost","step-zombie","step-metrics","step-anomaly","step-brief"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.classList.remove("pending","active");
+      el.classList.add("done");
+    }
+  });
+}
+
+function showSuccess() {
+  document.getElementById("progress-container").style.display = "none";
+  document.getElementById("success-container").style.display = "block";
+}
+
+function showError() {
+  clearIntervals();
+  document.getElementById("progress-container").style.display = "none";
+  document.getElementById("error-container").style.display = "block";
+}
+
+function resetAnalysis() {
+  document.getElementById("error-container").style.display = "none";
+  document.getElementById("run-btn").style.display = "inline-flex";
+  document.getElementById("confirm-rbac").parentElement.style.display = "flex";
+  document.getElementById("run-btn").disabled = !document.getElementById("confirm-rbac").checked;
+  simulatedPct = 0;
+  runId = null;
+}
+
+function clearIntervals() {
+  clearInterval(pollInterval);
+  clearInterval(progressInterval);
+}
+</script>
+{% endblock %}

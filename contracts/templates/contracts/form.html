@@ -1,0 +1,108 @@
+{% extends "dashboard/base.html" %}
+{% block title %}{% if contract %}Edit Contract{% else %}Add Contract{% endif %} — {{ client.display_name }}{% endblock %}
+
+{% block topbar %}
+<div class="topbar">
+  <div class="topbar-left">
+    <h1>
+      {% if contract %}Edit {{ contract.vendor_name }} {{ contract.product_name }}{% else %}Add Contract{% endif %}
+    </h1>
+    <div class="topbar-meta">{{ client.display_name }}</div>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+
+{% if errors.form_error %}
+<div class="card" style="border-color:var(--red);margin-bottom:16px">
+  <div style="color:var(--red)">{{ errors.form_error }}</div>
+</div>
+{% endif %}
+
+<form method="post" class="card" novalidate>
+  {% csrf_token %}
+
+  <div class="card-header">
+    <div class="card-title">Contract details</div>
+  </div>
+
+  <div style="display:flex;gap:16px;margin-bottom:14px">
+    <div class="filter-group" style="flex:1">
+      <label for="id_vendor_name">Vendor</label>
+      <input type="text" id="id_vendor_name" name="vendor_name" value="{{ form_data.vendor_name }}">
+      {% if errors.vendor_name %}<div style="color:var(--red);font-size:12px;margin-top:2px">{{ errors.vendor_name }}</div>{% endif %}
+    </div>
+    <div class="filter-group" style="flex:1">
+      <label for="id_product_name">Product</label>
+      <input type="text" id="id_product_name" name="product_name" value="{{ form_data.product_name }}">
+      {% if errors.product_name %}<div style="color:var(--red);font-size:12px;margin-top:2px">{{ errors.product_name }}</div>{% endif %}
+    </div>
+  </div>
+
+  <div style="display:flex;gap:16px;margin-bottom:14px">
+    <div class="filter-group" style="flex:1">
+      <label for="id_annual_cost">Annual cost</label>
+      <input type="number" step="0.01" id="id_annual_cost" name="annual_cost" value="{{ form_data.annual_cost }}">
+      {% if errors.annual_cost %}<div style="color:var(--red);font-size:12px;margin-top:2px">{{ errors.annual_cost }}</div>{% endif %}
+    </div>
+    <div class="filter-group" style="flex:1">
+      <label for="id_currency">Currency</label>
+      <select id="id_currency" name="currency">
+        <option value="CAD" {% if form_data.currency == "CAD" %}selected{% endif %}>CAD</option>
+        <option value="USD" {% if form_data.currency == "USD" %}selected{% endif %}>USD</option>
+      </select>
+      {% if errors.currency %}<div style="color:var(--red);font-size:12px;margin-top:2px">{{ errors.currency }}</div>{% endif %}
+    </div>
+    <div class="filter-group" style="flex:1">
+      <label for="id_renewal_date">Renewal date</label>
+      <input type="date" id="id_renewal_date" name="renewal_date" value="{{ form_data.renewal_date }}">
+      {% if errors.renewal_date %}<div style="color:var(--red);font-size:12px;margin-top:2px">{{ errors.renewal_date }}</div>{% endif %}
+    </div>
+  </div>
+
+  <div style="display:flex;gap:16px;margin-bottom:14px">
+    <div class="filter-group" style="flex:1">
+      <label for="id_owner_name">Owner name</label>
+      <input type="text" id="id_owner_name" name="owner_name" value="{{ form_data.owner_name }}">
+      {% if errors.owner_name %}<div style="color:var(--red);font-size:12px;margin-top:2px">{{ errors.owner_name }}</div>{% endif %}
+    </div>
+    <div class="filter-group" style="flex:1">
+      <label for="id_owner_email">Owner email</label>
+      <input type="email" id="id_owner_email" name="owner_email" value="{{ form_data.owner_email }}">
+      {% if errors.owner_email %}<div style="color:var(--red);font-size:12px;margin-top:2px">{{ errors.owner_email }}</div>{% endif %}
+    </div>
+  </div>
+
+  <div style="display:flex;gap:16px;margin-bottom:14px;align-items:flex-end">
+    <div class="filter-group" style="flex:1">
+      <label for="id_payment_method">Payment method</label>
+      <input type="text" id="id_payment_method" name="payment_method" value="{{ form_data.payment_method }}"
+             placeholder="e.g. Corporate Visa ...1234">
+    </div>
+    <div class="filter-group" style="flex:1">
+      <label style="display:flex;align-items:center;gap:6px;flex-direction:row">
+        <input type="checkbox" id="id_auto_renews" name="auto_renews" {% if form_data.auto_renews %}checked{% endif %}>
+        Auto-renews
+      </label>
+    </div>
+  </div>
+
+  <div class="filter-group" style="margin-bottom:14px">
+    <label for="id_notes">Notes</label>
+    <textarea id="id_notes" name="notes" rows="4"
+              style="background:var(--bg-sunken);border:1px solid var(--line);color:var(--ink);
+                     border-radius:var(--radius);padding:8px 10px;font-size:13px;font-family:var(--sans)">{{ form_data.notes }}</textarea>
+  </div>
+
+  <div style="display:flex;gap:8px;margin-top:8px">
+    <button type="submit" class="btn btn-primary">Save contract</button>
+    {% if contract %}
+      <a href="{% url 'contracts:detail' client.slug contract.pk %}" class="btn btn-ghost">Cancel</a>
+    {% else %}
+      <a href="{% url 'contracts:list' client.slug %}" class="btn btn-ghost">Cancel</a>
+    {% endif %}
+  </div>
+</form>
+
+{% endblock %}

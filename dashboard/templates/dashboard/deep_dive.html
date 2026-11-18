@@ -1,0 +1,203 @@
+{% extends "dashboard/base.html" %}
+{% block title %}Metrics — {{ client.display_name }}{% endblock %}
+
+{% block topbar %}
+<div class="topbar">
+  <div class="topbar-left">
+    <h1>Metrics</h1>
+    <div class="topbar-meta">Per-resource utilization detail</div>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+
+<!-- Resource picker -->
+<div class="card" style="margin-bottom:20px;padding:16px 20px">
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <label style="font-size:12px;font-weight:600;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">
+      Resource
+    </label>
+    <select onchange="selectResource(this.value)"
+            style="flex:1;min-width:260px;max-width:480px;background:var(--bg-sunken);
+                   border:1px solid var(--line);color:var(--ink);border-radius:var(--radius);
+                   padding:8px 12px;font-size:14px;font-family:var(--sans);outline:none;cursor:pointer">
+      <option value="">— Select a resource to view metrics —</option>
+      {% for group_label, items in grouped_resources.items %}
+        <optgroup label="{{ group_label }}">
+          {% for r in items %}
+          <option value="{{ r.resource_name }}"
+                  {% if r.resource_name == selected_resource %}selected{% endif %}>
+            {{ r.resource_name }}
+          </option>
+          {% endfor %}
+        </optgroup>
+      {% endfor %}
+    </select>
+    {% if selected_namespace %}
+    <span class="badge" style="background:var(--navy-bg);color:var(--navy)">
+      {{ namespace_label }}
+    </span>
+    {% endif %}
+  </div>
+</div>
+
+{% if not grouped_resources %}
+<div class="empty">
+  <div class="empty-icon">◎</div>
+  <h3>No metric data yet</h3>
+  <p>Run the analysis pipeline to collect utilization metrics for this tenant's resources.</p>
+</div>
+
+{% elif selected_resource %}
+
+<!-- Findings for this resource -->
+{% if resource_findings %}
+<div style="margin-bottom:16px" class="gap-col">
+  {% for f in resource_findings %}
+  <div class="finding-card{% if f.status == 'resolved' %} resolved{% endif %}">
+    <div class="finding-row" onclick="toggleFinding(this)">
+      <div class="finding-severity-bar {% if f.status == 'resolved' %}resolved{% else %}{{ f.severity }}{% endif %}"></div>
+      <div class="finding-main">
+        <div class="finding-type-label">
+          {% if f.status == "resolved" %}Resolved · {% endif %}
+          {% for k, v in finding_labels.items %}{% if k == f.finding_type %}{{ v }}{% endif %}{% endfor %}
+        </div>
+        <div class="finding-resource{% if f.status == 'resolved' %} struck{% endif %}">{{ f.resource_name }}</div>
+        <div class="finding-evidence-preview">{{ f.evidence|truncatechars:100 }}</div>
+      </div>
+      <div class="finding-right">
+        <div class="finding-amount{% if f.status == 'resolved' %} muted{% endif %}">
+          ${{ f.estimated_monthly_savings_usd|floatformat:0 }}
+        </div>
+        <div class="finding-per-mo">/mo</div>
+        <span class="badge badge-{{ f.severity }}">{{ f.severity }}</span>
+        <div class="finding-chevron">›</div>
+      </div>
+    </div>
+    <div class="finding-body">
+      <div>
+        <div class="finding-detail-label">Evidence</div>
+        <div class="finding-detail-box">{{ f.evidence }}</div>
+      </div>
+      <div>
+        {% if f.status == "resolved" %}
+          <div class="finding-detail-label">Outcome</div>
+          <div class="finding-detail-box">Resource removed. No further action needed.</div>
+        {% else %}
+          <div class="finding-detail-label">What to do</div>
+          <div class="finding-action-box">{{ f.action }}</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- Metric charts — loaded async -->
+<div class="grid-2" id="chartGrid">
+  <div class="card">
+    <div class="card-header"><div class="card-title" id="chart1-title">Loading…</div></div>
+    <div class="chart-wrap"><canvas id="chart1"></canvas></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-title" id="chart2-title">Loading…</div></div>
+    <div class="chart-wrap"><canvas id="chart2"></canvas></div>
+  </div>
+</div>
+<div class="grid-2 mt-4" id="chartGrid2">
+  <div class="card">
+    <div class="card-header"><div class="card-title" id="chart3-title">Loading…</div></div>
+    <div class="chart-wrap"><canvas id="chart3"></canvas></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-title" id="chart4-title">Loading…</div></div>
+    <div class="chart-wrap"><canvas id="chart4"></canvas></div>
+  </div>
+</div>
+
+{% else %}
+<div class="empty">
+  <div class="empty-icon">◎</div>
+  <h3>Select a resource above</h3>
+  <p>Choose any resource to view its utilization charts and any associated findings.</p>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function selectResource(name) {
+  if (name) window.location = `?resource=${encodeURIComponent(name)}`;
+}
+</script>
+{% if selected_resource %}
+<script>
+const SLUG     = "{{ client.slug }}";
+const RESOURCE = "{{ selected_resource }}";
+const s = getComputedStyle(document.documentElement);
+const C = {
+  ink:s.getPropertyValue('--ink').trim(), inkFaint:s.getPropertyValue('--ink-faint').trim(),
+  line:s.getPropertyValue('--line').trim(), navy:s.getPropertyValue('--navy').trim(),
+  teal:s.getPropertyValue('--teal').trim(), amber:s.getPropertyValue('--amber').trim(),
+  red:s.getPropertyValue('--red').trim(),
+};
+const CHART_DEFAULTS = {
+  responsive:true, maintainAspectRatio:false,
+  plugins:{legend:{display:false}},
+  scales:{
+    x:{grid:{display:false},ticks:{color:C.inkFaint,font:{family:"Inter",size:11},maxTicksLimit:8}},
+    y:{grid:{color:C.line},ticks:{color:C.inkFaint,font:{family:"Inter",size:11}}},
+  },
+};
+const NAMESPACE_CHART_CONFIG = {
+  "Microsoft.CognitiveServices/accounts":[
+    {key:"total_calls",      title:"Daily call volume",             type:"line",color:C.teal},
+    {key:"blocked_calls",    title:"Blocked calls (rate limiting)", type:"bar", color:C.red},
+    {key:"processed_prompt_tokens",title:"Prompt tokens",          type:"bar", color:C.navy},
+    {key:"generated_tokens", title:"Generated tokens",             type:"bar", color:C.teal},
+  ],
+  "Microsoft.Compute/virtualMachines":[
+    {key:"percentage_cpu",         title:"CPU utilization (%)",       type:"line",color:C.amber},
+    {key:"available_memory_bytes", title:"Available memory (bytes)",  type:"line",color:C.navy},
+    {key:"network_in_total",       title:"Network in (bytes)",        type:"bar", color:C.teal},
+    {key:"network_out_total",      title:"Network out (bytes)",       type:"bar", color:C.red},
+  ],
+  "Microsoft.Storage/storageAccounts":[
+    {key:"usedcapacity", title:"Used capacity (bytes)", type:"line",color:C.navy},
+    {key:"transactions",  title:"Daily transactions",   type:"bar", color:C.teal},
+  ],
+  "Microsoft.Web/sites":[
+    {key:"cputime",          title:"CPU time (seconds)",          type:"bar", color:C.amber},
+    {key:"requests",         title:"Daily requests",              type:"line",color:C.teal},
+    {key:"memoryworkingset", title:"Memory working set (bytes)",  type:"line",color:C.navy},
+  ],
+};
+fetch(`/client/${SLUG}/api/metrics/${encodeURIComponent(RESOURCE)}/`)
+  .then(r=>r.json())
+  .then(d=>{
+    const config = NAMESPACE_CHART_CONFIG[d.namespace]||[];
+    ["chart1","chart2","chart3","chart4"].forEach((id,i)=>{
+      const titleEl = document.getElementById(`${id}-title`);
+      const canvas  = document.getElementById(id);
+      const cfg     = config[i];
+      if (!cfg||!d[cfg.key]||d[cfg.key].labels.length===0) {
+        canvas.closest('.card').style.display="none"; return;
+      }
+      titleEl.textContent = cfg.title;
+      new Chart(canvas,{type:cfg.type,
+        data:{labels:d[cfg.key].labels,datasets:[{
+          label:cfg.title, data:d[cfg.key].values,
+          borderColor:cfg.color,
+          backgroundColor:cfg.color+(cfg.type==="line"?"22":"55"),
+          borderWidth:cfg.type==="line"?1.5:1,
+          pointRadius:0, fill:cfg.type==="line",
+        }]},
+        options:CHART_DEFAULTS});
+    });
+    if (!config[2]) document.getElementById("chartGrid2").style.display="none";
+  });
+</script>
+{% endif %}
+{% endblock %}

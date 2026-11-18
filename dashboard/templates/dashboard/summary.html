@@ -1,0 +1,395 @@
+{% extends "dashboard/base.html" %}
+{% block title %}Overview — {{ client.display_name }}{% endblock %}
+
+{% block topbar %}
+<div class="topbar">
+  <div class="topbar-left">
+    <h1>{{ client.display_name }}</h1>
+    <div class="topbar-meta">
+      {{ client.analysis_start }} → {{ client.analysis_end }} · {{ client.report_currency }}
+    </div>
+  </div>
+  <div class="topbar-actions">
+    {% if last_run %}
+    <div class="run-status">
+      <div class="dot dot-{{ last_run.status }}"></div>
+      {{ last_run.started_at|date:"M d, H:i" }}
+    </div>
+    <button class="btn btn-ghost btn-sm" onclick="showLog()">Log</button>
+    {% endif %}
+    <a class="btn btn-ghost btn-sm" href="{% url 'dashboard:download_brief' client.slug %}">
+      ⬇ Download brief
+    </a>
+    <button
+      id="run-analysis-btn-{{ client.slug }}"
+      class="btn btn-ghost"
+      style="font-size:13px"
+      onclick="runAnalysis('{{ client.slug }}')">
+      ↻ Run analysis
+    </button>
+    <button class="btn btn-primary btn-sm" id="run-btn"
+            onclick="triggerLiveCheck('{{ client.slug }}')">
+      ↻ Check status
+    </button>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+
+<!-- Stat row -->
+<div class="stats-row">
+  <div class="stat-card">
+    <div class="stat-label">Monthly savings</div>
+    <div class="stat-value" style="color:var(--teal)">${{ total_savings|floatformat:0 }}</div>
+    <div class="stat-sub">{{ client.report_currency }} opportunity · estimated from billing data and Azure list prices; actual savings may vary</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Annualised</div>
+    <div class="stat-value">${{ annual_savings|floatformat:0 }}</div>
+    <div class="stat-sub">if all actions taken</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Open findings</div>
+    <div class="stat-value">{{ total_findings }}</div>
+    <div class="stat-sub">
+      {% if table_severity_counts.high > 0 %}
+        <span style="color:var(--red)">{{ table_severity_counts.high }} high</span> ·
+      {% endif %}
+      {{ table_severity_counts.medium }} medium · {{ table_severity_counts.low }} low
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Est. monthly spend</div>
+    <div class="stat-value">${{ monthly_spend|floatformat:0 }}</div>
+    <div class="stat-sub">Based on {{ window_label }} average · ${{ total_spend|floatformat:0 }} total, all subscriptions</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Resolved</div>
+    <div class="stat-value" style="color:var(--ink-faint)">{{ resolved_count }}</div>
+    <div class="stat-sub">fixed since onboarding</div>
+  </div>
+</div>
+
+{% if cost_anomaly %}
+<div style="background:var(--amber-bg);border:1px solid var(--amber);border-radius:var(--radius-lg);
+            padding:14px 18px;margin-bottom:16px;display:flex;align-items:flex-start;gap:10px">
+  <span style="color:var(--amber);font-size:16px;flex-shrink:0;margin-top:1px">⚠</span>
+  <div>
+    <div style="font-size:13px;font-weight:600;color:var(--ink)">
+      Cost spike detected this week — {% if anomaly_pct_capped %}>10,000%{% else %}{{ anomaly_pct|floatformat:0 }}%{% endif %} above your normal baseline.
+      <a href="{% url 'dashboard:spend' client.slug %}" style="color:var(--amber)">Review the Spend page to see what drove it →</a>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if ai_finding_count %}
+<div style="background:var(--navy-bg);border:1px solid var(--navy);border-radius:var(--radius-lg);
+            padding:14px 18px;margin-bottom:16px;display:flex;align-items:flex-start;gap:10px">
+  <span style="color:var(--navy);font-size:16px;flex-shrink:0;margin-top:1px">🧠</span>
+  <div style="font-size:13px;font-weight:600;color:var(--ink)">
+    {{ ai_finding_count }} AI governance finding{{ ai_finding_count|pluralize }} detected —
+    <a href="{% url 'dashboard:ai_governance_page' client.slug %}" style="color:var(--navy)">view the AI Governance page →</a>
+  </div>
+</div>
+{% endif %}
+
+{% if not total_findings %}
+<div class="empty">
+  <div class="empty-icon">◈</div>
+  <h3>No findings yet</h3>
+  <p>Run the analysis pipeline to scan this tenant and generate cost-optimization findings.
+     Use the "↻ Run analysis" button above.</p>
+</div>
+{% else %}
+
+<!-- Real-spend summary bar (Actual Azure spend vs. estimated savings) -->
+<div class="stats-row" style="margin-bottom:16px">
+  <div class="stat-card">
+    <div class="stat-label">Est. monthly spend</div>
+    <div class="stat-value">${{ monthly_spend|floatformat:0 }}</div>
+    <div class="stat-sub">Based on {{ window_label }} average · ${{ total_spend|floatformat:0 }} over last {{ window_days }} days</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Identified waste</div>
+    <div class="stat-value" style="color:var(--red)">${{ total_savings|floatformat:0 }}/mo</div>
+    <div class="stat-sub">from open findings · estimated from billing data and Azure list prices; actual savings may vary</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Potential annual saving</div>
+    <div class="stat-value" style="color:var(--teal)">${{ annual_savings|floatformat:0 }}/yr</div>
+    <div class="stat-sub">if all actions taken</div>
+  </div>
+</div>
+
+<!-- Savings opportunities, grouped by resource -->
+<div class="card" style="margin-bottom:16px">
+  <div class="card-header">
+    <div class="card-title">Savings opportunities by resource</div>
+    <a href="{% url 'dashboard:findings' client.slug %}" class="card-action">See all findings →</a>
+  </div>
+
+  <!-- Column headers -->
+  <div style="display:grid;
+              grid-template-columns: 1fr 130px 120px 120px;
+              padding:8px 16px;
+              font-size:12px;
+              font-weight:600;
+              color:var(--ink-faint);
+              text-transform:uppercase;
+              letter-spacing:0.05em;
+              border-bottom:1px solid var(--line);
+              margin-bottom:4px">
+    <span>Resource</span>
+    <span style="text-align:right">Monthly spend</span>
+    <span style="text-align:right">Saving/mo</span>
+    <span style="text-align:right">Saving/yr</span>
+  </div>
+
+  {% include "dashboard/_resource_findings.html" %}
+</div>
+
+{% if spend_by_category_with_pct %}
+<!-- Spend by category (FOCUS service_category) -->
+<div class="card" style="margin-bottom:16px">
+  <div class="card-header">
+    <div class="card-title">Spend by category</div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Category</th>
+          <th style="text-align:right">Amount</th>
+          <th style="text-align:right">% of total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for cat in spend_by_category_with_pct %}
+        <tr>
+          <td>{{ cat.service_category }}</td>
+          <td class="amount">${{ cat.total|floatformat:2 }}</td>
+          <td style="text-align:right;color:var(--ink-faint)">{{ cat.pct|floatformat:0 }}%</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- Charts -->
+<div class="grid-2">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Savings by category</div>
+    </div>
+    <div class="chart-wrap"><canvas id="typeChart"></canvas></div>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Severity breakdown</div>
+    </div>
+    <div class="chart-wrap"><canvas id="sevChart"></canvas></div>
+  </div>
+</div>
+
+<div class="card mt-4">
+  <div class="card-header">
+    <div class="card-title">Monthly spend</div>
+    <a href="{% url 'dashboard:spend' client.slug %}" class="card-action">Full spend view →</a>
+  </div>
+  <div class="chart-wrap"><canvas id="spendChart"></canvas></div>
+</div>
+
+{% endif %}
+
+<!-- AI Governance — shown regardless of total_findings, since a client
+     can have Azure OpenAI usage with zero other cost findings -->
+<div class="card mt-4">
+  <div class="card-header">
+    <div class="card-title">AI Governance</div>
+  </div>
+
+  {% if not ai_by_deployment %}
+  <div class="empty">
+    <div class="empty-icon">◎</div>
+    <h3>No Azure OpenAI resources detected</h3>
+    <p>AI cost tracking activates automatically when OpenAI deployments are found in this subscription.</p>
+  </div>
+  {% else %}
+
+  <div class="stats-row" style="margin-bottom:12px">
+    <div class="stat-card">
+      <div class="stat-label">Total tokens</div>
+      <div class="stat-value">{{ ai_summary.total_tokens_display }}</div>
+      <div class="stat-sub">tokens consumed, last {{ ai_window_days }} days</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Estimated AI cost</div>
+      <div class="stat-value" style="color:var(--teal)">${{ ai_summary.total_cost|floatformat:2 }}</div>
+      <div class="stat-sub">estimated cost ({{ ai_window_days }} days)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Active deployments</div>
+      <div class="stat-value">{{ ai_by_deployment|length }}</div>
+      <div class="stat-sub">model deployments</div>
+    </div>
+  </div>
+  <p style="font-size:11px;color:var(--ink-faint);margin-bottom:16px">
+    Costs are estimates based on published token pricing. Actual Azure billing may differ.
+  </p>
+
+  <div class="table-wrap" style="margin-bottom:20px">
+    <table>
+      <thead>
+        <tr>
+          <th>Deployment</th>
+          <th>Model</th>
+          <th style="text-align:right">Input tokens</th>
+          <th style="text-align:right">Output tokens</th>
+          <th style="text-align:right">Total tokens</th>
+          <th style="text-align:right">Est. cost</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in ai_by_deployment %}
+        <tr {% if not d.tokens %}style="background:var(--amber-bg)"{% endif %}>
+          <td>{{ d.deployment_name|default:"—" }}</td>
+          <td>{{ d.model_name|default:d.deployment_name|default:"—" }}</td>
+          <td class="amount" style="text-align:right">{{ d.input_tok|default:0 }}</td>
+          <td class="amount" style="text-align:right">{{ d.output_tok|default:0 }}</td>
+          <td class="amount" style="text-align:right">{{ d.tokens|default:0 }}</td>
+          <td class="amount" style="text-align:right">${{ d.cost|floatformat:2 }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card-header" style="margin-bottom:8px">
+    <div class="card-title">AI Governance Findings</div>
+  </div>
+  {% if ai_findings %}
+  <div class="gap-col">
+    {% for f in ai_findings %}
+    <div class="finding-card">
+      <div class="finding-row" onclick="toggleFinding(this)">
+        <div class="finding-severity-bar {{ f.severity }}"></div>
+        <div class="finding-main">
+          <div class="finding-type-label">{{ f.get_finding_type_display }}</div>
+          <div class="finding-resource">{{ f.resource_name }}</div>
+          <div class="finding-evidence-preview">{{ f.evidence|truncatechars:120 }}</div>
+        </div>
+        <div class="finding-right">
+          <span class="badge badge-{{ f.severity }}">{{ f.get_severity_display }}</span>
+          <div class="finding-chevron">›</div>
+        </div>
+      </div>
+      <div class="finding-body">
+        <div>
+          <div class="finding-detail-label">Evidence</div>
+          <div class="finding-detail-box">{{ f.evidence }}</div>
+        </div>
+        <div>
+          <div class="finding-detail-label">What to do</div>
+          <div class="finding-action-box">{{ f.action }}</div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p style="color:var(--ink-faint);text-align:center;padding:24px 0">No AI governance issues detected.</p>
+  {% endif %}
+
+  {% endif %}
+
+  <a href="{% url 'dashboard:ai_governance_page' client.slug %}"
+     class="btn btn-ghost"
+     style="font-size:13px; margin-top:8px">
+    View full AI Governance report →
+  </a>
+</div>
+
+<!-- Log modal -->
+<div class="modal-overlay" id="logModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Pipeline log</h3>
+      <button class="btn btn-ghost btn-sm" onclick="closeLog()">Close</button>
+    </div>
+    <div class="modal-body">
+      <pre class="log-output" id="logContent">{% if last_run %}{{ last_run.log }}{% endif %}</pre>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const SLUG = "{{ client.slug }}";
+function C() {
+  const s = getComputedStyle(document.documentElement);
+  return {
+    navy: s.getPropertyValue('--navy').trim(),
+    teal: s.getPropertyValue('--teal').trim(),
+    amber: s.getPropertyValue('--amber').trim(),
+    red: s.getPropertyValue('--red').trim(),
+    ink: s.getPropertyValue('--ink').trim(),
+    inkFaint: s.getPropertyValue('--ink-faint').trim(),
+    line: s.getPropertyValue('--line').trim(),
+  };
+}
+const c = C();
+const chartDefaults = { responsive:true, maintainAspectRatio:false,
+  plugins:{legend:{display:false}},
+  scales:{x:{grid:{display:false},ticks:{color:c.inkFaint,font:{family:"Inter",size:11}}},
+          y:{grid:{color:c.line},ticks:{color:c.inkFaint,font:{family:"Inter",size:11}}}} };
+
+{% if finding_types %}
+const typeCtx = document.getElementById("typeChart");
+if (typeCtx) new Chart(typeCtx, { type:"bar",
+  data:{ labels:[{% for t in finding_types %}"{{ t.label|truncatechars:22 }}"{% if not forloop.last %},{% endif %}{% endfor %}],
+    datasets:[{data:[{% for t in finding_types %}{{ t.savings|floatformat:2 }}{% if not forloop.last %},{% endif %}{% endfor %}],
+    backgroundColor:c.teal+"28",borderColor:c.teal,borderWidth:1,borderRadius:4}] },
+  options:{ ...chartDefaults, indexAxis:"y" } });
+{% endif %}
+
+const sevCtx = document.getElementById("sevChart");
+if (sevCtx) new Chart(sevCtx, { type:"doughnut",
+  data:{ labels:["High","Medium","Low"],
+    datasets:[{data:[{{ table_severity_counts.high }},{{ table_severity_counts.medium }},{{ table_severity_counts.low }}],
+    backgroundColor:[c.red+"22",c.amber+"22",c.teal+"22"],
+    borderColor:[c.red,c.amber,c.teal],borderWidth:1.5}] },
+  options:{ responsive:true,maintainAspectRatio:false,cutout:"68%",
+    plugins:{legend:{labels:{color:c.ink,boxWidth:10,font:{family:"Inter",size:12}}}} } });
+
+fetch(`/client/${SLUG}/api/spend-chart/`)
+  .then(r=>r.json()).then(d=>{
+    const ctx = document.getElementById("spendChart");
+    if (!ctx) return;
+    new Chart(ctx,{type:"bar",
+      data:{labels:d.labels,datasets:[{data:d.values,
+        backgroundColor:c.navy+"28",borderColor:c.navy,borderWidth:1,borderRadius:4}]},
+      options:chartDefaults});
+  });
+
+function triggerLiveCheck(slug) {
+  const btn = document.getElementById("run-btn");
+  const originalText = btn.textContent;
+  btn.textContent = "Checking…"; btn.disabled = true;
+  fetch(`/pipeline/live-check/${slug}/`, { method:"POST",
+    headers:{"X-CSRFToken": CSRF_TOKEN} })
+    .then(r=>r.json())
+    .then(d=>{
+      if (d.status==="error") { alert(`Live check failed: ${d.error}`); btn.textContent=originalText; btn.disabled=false; return; }
+      location.reload();
+    })
+    .catch(()=>{ btn.textContent=originalText; btn.disabled=false; });
+}
+function showLog() { document.getElementById("logModal").classList.add("open"); }
+function closeLog() { document.getElementById("logModal").classList.remove("open"); }
+</script>
+{% endblock %}

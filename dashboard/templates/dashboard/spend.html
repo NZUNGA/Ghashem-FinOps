@@ -1,0 +1,108 @@
+{% extends "dashboard/base.html" %}
+{% block title %}Spend — {{ client.display_name }}{% endblock %}
+
+{% block topbar %}
+<div class="topbar">
+  <div class="topbar-left">
+    <h1>Spend</h1>
+    <div class="topbar-meta">{{ client.analysis_start }} → {{ client.analysis_end }}</div>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="stats-row" style="grid-template-columns:repeat(3,1fr);margin-bottom:20px">
+  <div class="stat-card">
+    <div class="stat-label">Total spend</div>
+    <div class="stat-value">${{ total_cost|floatformat:0 }}</div>
+    <div class="stat-sub">{{ client.report_currency }}, {{ window_label }} window</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Monthly average</div>
+    <div class="stat-value">${{ monthly_avg|floatformat:0 }}</div>
+    <div class="stat-sub">across the analysis window</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Savings opportunity</div>
+    <div class="stat-value" style="color:var(--teal)">${{ total_savings|default:0|floatformat:0 }}</div>
+    <div class="stat-sub">estimated monthly reduction</div>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:16px">
+  <div class="card-header">
+    <div class="card-title">Monthly spend trend</div>
+  </div>
+  <div class="chart-wrap" style="height:260px"><canvas id="spendChart"></canvas></div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">Spend by service</div>
+  </div>
+  <div class="chart-wrap" style="height:{{ by_service|length|add:2 }}0px;min-height:200px">
+    <canvas id="serviceChart"></canvas>
+  </div>
+</div>
+
+{% if by_service %}
+<div class="card mt-4">
+  <div class="card-header">
+    <div class="card-title">Service breakdown</div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Service</th>
+          <th style="text-align:right">Total spend</th>
+          <th style="text-align:right">% of total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in by_service %}
+        <tr>
+          <td>{{ s.service_name }}</td>
+          <td style="text-align:right;font-family:var(--mono);font-size:13px">${{ s.total|floatformat:2 }}</td>
+          <td style="text-align:right;color:var(--ink-faint);font-size:13px">
+            {% widthratio s.total total_cost 100 %}%
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const SLUG = "{{ client.slug }}";
+const s = getComputedStyle(document.documentElement);
+const C = {
+  navy: s.getPropertyValue('--navy').trim(), teal: s.getPropertyValue('--teal').trim(),
+  ink: s.getPropertyValue('--ink').trim(), inkFaint: s.getPropertyValue('--ink-faint').trim(),
+  line: s.getPropertyValue('--line').trim(),
+};
+const baseOpts = { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+  scales:{x:{grid:{display:false},ticks:{color:C.inkFaint,font:{family:"Inter",size:11}}},
+          y:{grid:{color:C.line},ticks:{color:C.inkFaint,font:{family:"Inter",size:11}}}} };
+
+fetch(`/client/${SLUG}/api/spend-chart/`)
+  .then(r=>r.json()).then(d=>{
+    new Chart(document.getElementById("spendChart"),{type:"bar",
+      data:{labels:d.labels,datasets:[{data:d.values,backgroundColor:C.navy+"28",
+        borderColor:C.navy,borderWidth:1,borderRadius:4}]},options:baseOpts});
+  });
+
+const serviceLabels=[{% for s in by_service %}"{{ s.service_name|escapejs }}"{% if not forloop.last %},{% endif %}{% endfor %}];
+const serviceValues=[{% for s in by_service %}{{ s.total }}{% if not forloop.last %},{% endif %}{% endfor %}];
+new Chart(document.getElementById("serviceChart"),{type:"bar",
+  data:{labels:serviceLabels,datasets:[{data:serviceValues,
+    backgroundColor:C.teal+"28",borderColor:C.teal,borderWidth:1,borderRadius:4}]},
+  options:{...baseOpts,indexAxis:"y",
+    scales:{x:{grid:{color:C.line},ticks:{color:C.inkFaint,font:{family:"Inter",size:11}}},
+            y:{grid:{display:false},ticks:{color:C.ink,font:{family:"Inter",size:11}}}}}});
+</script>
+{% endblock %}

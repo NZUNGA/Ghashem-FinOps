@@ -1,0 +1,28 @@
+{% extends "dashboard/base.html" %}
+{% load tier_tags %}
+{% block title %}Upgrade required — {{ client.display_name }}{% endblock %}
+
+{% block topbar %}
+<div class="topbar">
+  <div class="topbar-left">
+    <h1>{{ client.display_name }}</h1>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+
+<div class="card">
+  <div class="empty">
+    <div class="empty-icon" style="color:var(--teal);opacity:1;font-size:48px">🔒</div>
+    <h3>This feature requires the {{ required_tier|tier_label:tier_display }} plan</h3>
+    <p>Your current plan is {{ current_tier|tier_label:tier_display }}.</p>
+    <p>To unlock this feature, contact us to upgrade your Ghashem plan.</p>
+    <div style="display:flex;gap:8px;justify-content:center;margin-top:8px">
+      <a href="mailto:{{ contact_email }}" class="btn btn-primary">Contact us to upgrade</a>
+      <a href="/client/{{ client.slug }}/" class="btn btn-ghost">← Back to dashboard</a>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
